@@ -3,12 +3,13 @@ package com.example.camera2apiv2;
 import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
 
 import android.Manifest;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.graphics.ImageFormat;
+import android.graphics.Matrix;
+import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
@@ -28,7 +29,6 @@ import android.os.HandlerThread;
 
 import android.os.Bundle;
 import android.util.Log;
-import android.util.Range;
 import android.util.Size;
 import android.util.SparseIntArray;
 import android.view.Surface;
@@ -45,7 +45,7 @@ import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
+
 import java.util.List;
 import java.util.UUID;
 
@@ -93,7 +93,7 @@ public class MainActivity extends AppCompatActivity {
         @Override
         public void onError(@NonNull CameraDevice cameraDevice, int i) {
             cameraDevice.close();
-            cameraDevice=null;
+            //cameraDevice=null;
         }
     };
 
@@ -133,13 +133,14 @@ public class MainActivity extends AppCompatActivity {
                 height = jpegSizes[0].getHeight();
             }
 
-            final ImageReader reader = ImageReader.newInstance(width,height,ImageFormat.JPEG,1);
+            imageReader = ImageReader.newInstance(width,height,ImageFormat.JPEG,1);
             List<Surface> outputSurface = new ArrayList<>(2);
-            outputSurface.add(reader.getSurface());
+            outputSurface.add(imageReader.getSurface());
             outputSurface.add(new Surface(textureView.getSurfaceTexture()));
 
+
             final CaptureRequest.Builder captureBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
-            captureBuilder.addTarget(reader.getSurface());
+            captureBuilder.addTarget(imageReader.getSurface());
             //captureBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO);
             // configure CAMERA CALIBRATION
             captureBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_OFF);
@@ -160,7 +161,7 @@ public class MainActivity extends AppCompatActivity {
                 public void onImageAvailable(ImageReader imageReader) {
                     Image image = null;
                     try{
-                        image = reader.acquireLatestImage();
+                        image = imageReader.acquireLatestImage();
                         ByteBuffer buffer = image.getPlanes()[0].getBuffer();
                         byte[] bytes = new byte[buffer.capacity()];
                         buffer.get(bytes);
@@ -206,7 +207,7 @@ public class MainActivity extends AppCompatActivity {
                     }
             );
 
-            reader.setOnImageAvailableListener(readerListener,mBackgroundHandler);
+            imageReader.setOnImageAvailableListener(readerListener,mBackgroundHandler);
             final CameraCaptureSession.CaptureCallback captureListener = new CameraCaptureSession.CaptureCallback() {
                 @Override
                 public void onCaptureCompleted(@NonNull CameraCaptureSession session, @NonNull CaptureRequest request, @NonNull TotalCaptureResult result) {
@@ -318,8 +319,9 @@ public class MainActivity extends AppCompatActivity {
 
     TextureView.SurfaceTextureListener textureListener = new TextureView.SurfaceTextureListener() {
         @Override
-        public void onSurfaceTextureAvailable(SurfaceTexture surfaceTexture, int i, int i1) {
+        public void onSurfaceTextureAvailable(SurfaceTexture surfaceTexture, int width, int height) {
             openCamera();
+            //configureTransform(width, height); // Llama a configureTransform aquí
         }
 
         @Override
@@ -381,4 +383,37 @@ public class MainActivity extends AppCompatActivity {
             e.printStackTrace();
         }
     }
+
+    // ... (código existente)
+
+    private Matrix matrix = new Matrix(); // Declaración de la matriz como variable de instancia
+
+    // Método configureTransform
+    private void configureTransform(int viewWidth, int viewHeight) {
+        if (imageDimension == null || textureView == null) {
+            return;
+        }
+
+        RectF viewRect = new RectF(0, 0, viewWidth, viewHeight);
+        RectF bufferRect = new RectF(0, 0, imageDimension.getHeight(), imageDimension.getWidth());
+        float centerX = viewRect.centerX();
+        float centerY = viewRect.centerY();
+
+        bufferRect.offset(centerX - bufferRect.centerX(), centerY - bufferRect.centerY());
+        matrix.setRectToRect(viewRect, bufferRect, Matrix.ScaleToFit.FILL);
+
+        float scale = Math.max(
+                (float) viewHeight / imageDimension.getHeight(),
+                (float) viewWidth / imageDimension.getWidth()
+        );
+
+        matrix.postScale(scale, scale, centerX, centerY);
+        textureView.setTransform(matrix);
+    }
+
+
+
+
+
+
 }
