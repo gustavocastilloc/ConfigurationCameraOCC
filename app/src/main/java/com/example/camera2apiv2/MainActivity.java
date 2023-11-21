@@ -29,12 +29,15 @@ import android.os.HandlerThread;
 
 import android.os.Bundle;
 import android.util.Log;
+import android.util.Range;
 import android.util.Size;
 import android.util.SparseIntArray;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
 import android.widget.Button;
+import android.widget.SeekBar;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.File;
@@ -74,8 +77,16 @@ public class MainActivity extends AppCompatActivity {
     private Handler mBackgroundHandler;
     private HandlerThread mBackgroundThread;
     private static final int REQUEST_EXTERNAL_STORAGE_PERMISSION = 123;
-    private final int ISO_VALUE = 1000;
-    private final long SHUTTER_SPEED = 1000000000L / 1500;
+    private int ISO_VALUE = 1000;
+    private long SHUTTER_SPEED = 1000000000L / 1500;
+    private Range<Integer> isoRange;
+    private Range<Long> speedRange;
+
+    //VARIABLES DE SEEKBAR
+    private SeekBar shutterSpeedSeekBar, isoSeekBar;
+    private TextView shutterSpeedLabel, isoLabel;
+    private int currentShutterSpeed, currentIso;
+    //VARIABLES DE SEEKBAR
 
 
     CameraDevice.StateCallback stateCallback = new CameraDevice.StateCallback() {
@@ -102,17 +113,82 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         textureView = (TextureView)findViewById(R.id.textureView);
+
         //From Java 1.4 , you can use keyword 'assert' to check expression true or false
         assert textureView != null;
         textureView.setSurfaceTextureListener(textureListener);
         btnCapture = (Button)findViewById(R.id.btnCapture);
+
+        //BARRA INICIALIZACION
+        shutterSpeedSeekBar = findViewById(R.id.shutterSpeedSeekBar);
+        isoSeekBar = findViewById(R.id.isoSeekBar);
+        shutterSpeedLabel = findViewById(R.id.shutterSpeedLabel);
+        isoLabel = findViewById(R.id.isoLabel);
+        //BARRA INICIALIZACION
+
+
+        //SET VALUES
+        shutterSpeedSeekBar.setMin(100000);
+        shutterSpeedSeekBar.setMax(1333333);
+        isoSeekBar.setMin(100);
+        isoSeekBar.setMax(1500);
+
         btnCapture.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 takePicture();
             }
         });
+        shutterSpeedSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                // Calcula el valor de shutter speed y actualiza el texto correspondiente
+
+
+                //SHUTTER_SPEED = (long) (1000000000L / Math.pow(2, progress / 10.0));
+                SHUTTER_SPEED=progress;
+                shutterSpeedLabel.setText("Shutter Speed: " + SHUTTER_SPEED);
+                updatePreview();
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+                // No es necesario implementar en este caso
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                // No es necesario implementar en este caso
+            }
+        });
+
+
+        isoSeekBar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                // Actualiza el valor de ISO y el texto correspondiente
+                ISO_VALUE = progress;
+                isoLabel.setText("ISO: " + ISO_VALUE);
+                updatePreview();
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+                // No es necesario implementar en este caso
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+                // No es necesario implementar en este caso
+            }
+        });
+
+
+
+
     }
+
+
     private void takePicture(){
         if(cameraDevice == null)
             return;
@@ -137,6 +213,8 @@ public class MainActivity extends AppCompatActivity {
             List<Surface> outputSurface = new ArrayList<>(2);
             outputSurface.add(imageReader.getSurface());
             outputSurface.add(new Surface(textureView.getSurfaceTexture()));
+
+            //calibrationValues(characteristics);
 
 
             final CaptureRequest.Builder captureBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE);
@@ -239,6 +317,13 @@ public class MainActivity extends AppCompatActivity {
 
 
     }
+    private void calibrationValues(CameraCharacteristics characteristics){
+        isoRange = characteristics.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE);
+        speedRange = characteristics.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE);
+        Log.d("ATAG CAL:", "Rango ISO=" + isoRange);
+        Log.d("ATAG CAL:", "Rango SPEED=" + speedRange);
+    }
+
     private void createCameraPreview(){
         try{
             SurfaceTexture texture = textureView.getSurfaceTexture();
@@ -254,6 +339,7 @@ public class MainActivity extends AppCompatActivity {
                         return;
                     cameraCaptureSessions = cameraCaptureSession;
                     updatePreview();
+
                 }
 
                 @Override
@@ -265,23 +351,22 @@ public class MainActivity extends AppCompatActivity {
             e.printStackTrace();
         }
     }
-    private void updatePreview(){
-        if(cameraDevice == null)
+    private void updatePreview() {
+        if (cameraDevice == null)
             Toast.makeText(this, "Error", Toast.LENGTH_SHORT).show();
-        //captureRequestBuilder.set(CaptureRequest.CONTROL_MODE,CaptureRequest.CONTROL_MODE_AUTO);
 
         captureRequestBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_OFF);
         captureRequestBuilder.set(CaptureRequest.SENSOR_SENSITIVITY, ISO_VALUE);
         captureRequestBuilder.set(CaptureRequest.SENSOR_EXPOSURE_TIME, SHUTTER_SPEED);
         captureRequestBuilder.set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_OFF);
 
-        try{
-            cameraCaptureSessions.setRepeatingRequest(captureRequestBuilder.build(),null,mBackgroundHandler);
-
+        try {
+            cameraCaptureSessions.setRepeatingRequest(captureRequestBuilder.build(), null, mBackgroundHandler);
         } catch (CameraAccessException e) {
             e.printStackTrace();
         }
     }
+
     private void openCamera(){
         CameraManager manager = (CameraManager)getSystemService(Context.CAMERA_SERVICE);
         try{
@@ -304,6 +389,7 @@ public class MainActivity extends AppCompatActivity {
 
 
             manager.openCamera(cameraId,stateCallback,null);
+            calibrationValues(characteristics);
 
         } catch (CameraAccessException e) {
             e.printStackTrace();
@@ -317,11 +403,13 @@ public class MainActivity extends AppCompatActivity {
 
 
 
+
     TextureView.SurfaceTextureListener textureListener = new TextureView.SurfaceTextureListener() {
         @Override
         public void onSurfaceTextureAvailable(SurfaceTexture surfaceTexture, int width, int height) {
             openCamera();
             //configureTransform(width, height); // Llama a configureTransform aquí
+
         }
 
         @Override
@@ -358,10 +446,11 @@ public class MainActivity extends AppCompatActivity {
     protected void onResume() {
         super.onResume();
         startBackgroundThread();
-        if(textureView.isAvailable())
+        if(textureView.isAvailable()) {
             openCamera();
-        else
-            textureView.setSurfaceTextureListener(textureListener);
+
+        }else{
+            textureView.setSurfaceTextureListener(textureListener);}
     }
     @Override
     protected void onPause() {
@@ -394,7 +483,16 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
-        RectF viewRect = new RectF(0, 0, viewWidth, viewHeight);
+        int rotation = getWindowManager().getDefaultDisplay().getRotation();
+        float textureViewWidth = viewWidth;
+        float textureViewHeight = viewHeight;
+
+        if (rotation == Surface.ROTATION_90 || rotation == Surface.ROTATION_270) {
+            textureViewWidth = viewHeight;
+            textureViewHeight = viewWidth;
+        }
+
+        RectF viewRect = new RectF(0, 0, textureViewWidth, textureViewHeight);
         RectF bufferRect = new RectF(0, 0, imageDimension.getHeight(), imageDimension.getWidth());
         float centerX = viewRect.centerX();
         float centerY = viewRect.centerY();
@@ -403,13 +501,30 @@ public class MainActivity extends AppCompatActivity {
         matrix.setRectToRect(viewRect, bufferRect, Matrix.ScaleToFit.FILL);
 
         float scale = Math.max(
-                (float) viewHeight / imageDimension.getHeight(),
-                (float) viewWidth / imageDimension.getWidth()
+                (float) textureViewHeight / imageDimension.getHeight(),
+                (float) textureViewWidth / imageDimension.getWidth()
         );
 
         matrix.postScale(scale, scale, centerX, centerY);
+
+        switch (rotation) {
+            case Surface.ROTATION_0:
+                matrix.postRotate(0, centerX, centerY);
+                break;
+            case Surface.ROTATION_90:
+                matrix.postRotate(90, centerX, centerY);
+                break;
+            case Surface.ROTATION_180:
+                matrix.postRotate(180, centerX, centerY);
+                break;
+            case Surface.ROTATION_270:
+                matrix.postRotate(270, centerX, centerY);
+                break;
+        }
+
         textureView.setTransform(matrix);
     }
+
 
 
 
